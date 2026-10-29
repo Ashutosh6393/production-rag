@@ -1,0 +1,1 @@
+ruff check --select I --fix
