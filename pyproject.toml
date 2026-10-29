@@ -11,10 +11,10 @@ dependencies = [
     "pymupdf>=2.0",
     "uvicorn>=0.54.0",
 ]
-
-[too.ruff]
-line-length = 100
 env = ".venv"
+
+[tool.ruff]
+line-length = 100
 
 [tool.pyrefly]
 project-includes = [

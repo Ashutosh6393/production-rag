@@ -29,11 +29,10 @@ def test_concrete_parser_can_implement_parse():
                 pages=(),
                 warnings=(),
             )
-    
+
     parser = FakeParser()
 
     result = parser.parse(Path("test.pdf"))
-
 
     assert result.source_name == "test.pdf"
     assert isinstance(result, ExtractionResult)

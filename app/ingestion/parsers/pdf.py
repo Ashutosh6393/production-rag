@@ -49,9 +49,7 @@ class PDFParser(DocumentParser):
                     text = extracted.strip() if isinstance(extracted, str) else ""
 
                     if not text:
-                        warnings.append(
-                            f"Page {page_index + 1} contains no extractable text."
-                        )
+                        warnings.append(f"Page {page_index + 1} contains no extractable text.")
 
                     pages.append(ExtractedPage(page_number=page_index + 1, text=text))
 
@@ -66,9 +64,7 @@ class PDFParser(DocumentParser):
             warnings.append("The PDF contains no pages.")
 
         if pages and all(not page.text for page in pages):
-            warnings.append(
-                "No extractable text was found. The document may require OCR."
-            )
+            warnings.append("No extractable text was found. The document may require OCR.")
 
         return ExtractionResult(
             source_name=source.name,

@@ -5,7 +5,6 @@ import pytest
 
 from app.ingestion.exceptions import (
     DocumentNotFoundError,
-    EncryptedDocumentError,
     InvalidDocumentError,
     UnsupportedDocumentError,
 )
@@ -91,7 +90,7 @@ def test_directory_is_rejected(
     parser: PDFParser,
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(ValueError, match="not a file"):
+    with pytest.raises(InvalidDocumentError, match="not a file"):
         parser.parse(tmp_path)
 
 

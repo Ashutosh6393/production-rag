@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 from app.ingestion.parsers.pdf import PDFParser

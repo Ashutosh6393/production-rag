@@ -24,9 +24,7 @@ class ExtractionResult(BaseModel):
     source_format: str = Field(description="Format of the document.")
     page_count: int = Field(ge=0, description="Number of pages in the document.")
     metadata: dict[str, Any] = Field(description="Metadata of the document.", default_factory=dict)
-    pages: tuple[ExtractedPage, ...] = Field(
-        description="Extracted pages from the document."
-    )
+    pages: tuple[ExtractedPage, ...] = Field(description="Extracted pages from the document.")
     warnings: tuple[str, ...] = Field(
         description="Warnings raised during the extraction process.", default=()
     )
