@@ -33,3 +33,8 @@ class ExtractionResult(BaseModel):
         """Combine all pages while retaining page boundaries."""
 
         return "\n\n".join(page.text for page in self.pages)
+
+
+# uv run python -c "from app.ingestion.schemas import ExtractedPage, ExtractionResult; p = ExtractedPage(page_number=1, text='Hello'); r = ExtractionResult(source_name='test.pdf', source_format='pdf', page_count=1, pages=(p,)); print(r.full_text)"
+
+# expected output: Hello
