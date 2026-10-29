@@ -39,9 +39,7 @@ class PDFParser(DocumentParser):
                     raise EncryptedDocumentError("The supplied file is protected by a password.")
 
                 metadata: dict[str, Any] = {
-                    key: value
-                    for key, value in (document.metadata or {}).items()
-                    if value is not None
+                    key: value for key, value in (document.metadata or {}).items() if value is not None
                 }
 
                 for page_index, page in enumerate(document):

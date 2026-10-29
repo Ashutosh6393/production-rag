@@ -11,9 +11,7 @@ class DocumentChunk(BaseModel):
     text: str = Field(min_length=1, description="Text of the chunk.")
 
     source_name: str = Field(description="Source of the document.")
-    page_number: tuple[int, ...] = Field(
-        min_length=1, description="Page numbers where the chunk appears."
-    )
+    page_number: tuple[int, ...] = Field(min_length=1, description="Page numbers where the chunk appears.")
 
     metadata: dict[str, str | int | float | bool] = Field(default_factory=dict)
 
