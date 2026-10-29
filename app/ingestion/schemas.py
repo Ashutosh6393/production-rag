@@ -1,6 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# page may not contain any text, but it will still be extracted it may contain images or other non-text content
 class ExtractedPage(BaseModel):
     """Text extracted from single document page."""
 
@@ -15,11 +16,11 @@ class ExtractionResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    source: str = Field(
+    source_name: str = Field(
         description="Source of the document.",
     )
-    document_format: str = Field(description="Format of the document.")
-    pages_count: int = Field(ge=0, description="Number of pages in the document.")
+    source_format: str = Field(description="Format of the document.")
+    page_count: int = Field(ge=0, description="Number of pages in the document.")
     pages: tuple[ExtractedPage, ...] = Field(
         description="Extracted pages from the document."
     )
