@@ -1,0 +1,34 @@
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class ExtractedPage(BaseModel):
+    """Text extracted from single document page."""
+
+    model_config = ConfigDict(frozen=True)
+
+    page_number: int = Field(ge=1, description="Page number in the document.")
+    text: str = Field(description="Text extracted from the page.")
+
+
+class ExtractionResult(BaseModel):
+    """Structured output produced by a document parser."""
+
+    model_config = ConfigDict(frozen=True)
+
+    source: str = Field(
+        description="Source of the document.",
+    )
+    document_format: str = Field(description="Format of the document.")
+    pages_count: int = Field(ge=0, description="Number of pages in the document.")
+    pages: tuple[ExtractedPage, ...] = Field(
+        description="Extracted pages from the document."
+    )
+    warnings: tuple[str, ...] = Field(
+        description="Warnings raised during the extraction process.", default=()
+    )
+
+    @property
+    def full_text(self) -> str:
+        """Combine all pages while retaining page boundaries."""
+
+        return "\n\n".join(page.text for page in self.pages)
