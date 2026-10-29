@@ -3,6 +3,12 @@ from pathlib import Path
 import pymupdf
 import pytest
 
+from app.ingestion.exceptions import (
+    DocumentNotFoundError,
+    EncryptedDocumentError,
+    InvalidDocumentError,
+    UnsupportedDocumentError,
+)
 from app.ingestion.parsers.pdf import PDFParser
 from app.ingestion.schemas import ExtractionResult
 
@@ -77,7 +83,7 @@ def test_missing_file_raises_error(
     parser: PDFParser,
     tmp_path: Path,
 ) -> None:
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(DocumentNotFoundError):
         parser.parse(tmp_path / "missing.pdf")
 
 
@@ -96,7 +102,7 @@ def test_unsupported_extension_is_rejected(
     text_file = tmp_path / "document.txt"
     text_file.write_text("Not a PDF", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Unsupported file extension"):
+    with pytest.raises(UnsupportedDocumentError, match="Unsupported file extension"):
         parser.parse(text_file)
 
 
@@ -107,7 +113,7 @@ def test_empty_file_is_rejected(
     empty_pdf = tmp_path / "empty.pdf"
     empty_pdf.write_bytes(b"")
 
-    with pytest.raises(ValueError, match="empty"):
+    with pytest.raises(InvalidDocumentError, match="empty"):
         parser.parse(empty_pdf)
 
 
@@ -118,7 +124,7 @@ def test_corrupt_pdf_is_rejected(
     corrupt_pdf = tmp_path / "corrupt.pdf"
     corrupt_pdf.write_bytes(b"%PDF-1.7\nnot a valid PDF")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidDocumentError):
         parser.parse(corrupt_pdf)
 
 
@@ -141,7 +147,6 @@ def test_textless_pages_produce_warnings(
     assert any("OCR" in warning for warning in result.warnings)
 
 
-
 def test_zero_page_pdf_is_rejected(
     parser: PDFParser,
     tmp_path: Path,
@@ -152,9 +157,7 @@ def test_zero_page_pdf_is_rejected(
         with pymupdf.open() as document:
             document.save(pdf_path)
     except ValueError as exc:
-        pytest.skip(
-            f"Installed PyMuPDF cannot create a zero-page PDF: {exc}"
-        )
+        pytest.skip(f"Installed PyMuPDF cannot create a zero-page PDF: {exc}")
 
     result = parser.parse(pdf_path)
 
