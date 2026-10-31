@@ -51,6 +51,9 @@ def _split_text(
         if chunk:
             chunks.append(chunk)
 
+        if end >= len(text):
+            break
+
         next_start = max(start + 1, end - overlap)
 
         # avoid beginning the next chunk with whitespace.
