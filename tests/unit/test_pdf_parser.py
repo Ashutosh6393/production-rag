@@ -146,7 +146,7 @@ def test_textless_pages_produce_warnings(
     assert any("OCR" in warning for warning in result.warnings)
 
 
-def test_zero_page_pdf_is_rejected(
+def test_zero_page_pdf_produces_warning(
     parser: PDFParser,
     tmp_path: Path,
 ) -> None:

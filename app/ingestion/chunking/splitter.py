@@ -12,7 +12,7 @@ def _make_chunk_id(
 ) -> str:
     """Generate a deterministic ID for a chunk's current position and text."""
 
-    payload = f"{source_name}\0{chunk_index}\0{text}".encode("utf-8")
+    payload = f"{source_name}\0{chunk_index}\0{text}".encode()
     return hashlib.sha256(payload).hexdigest()
 
 
