@@ -2,9 +2,9 @@ from pathlib import Path
 
 from app.ingestion.chunking.schemas import DocumentChunk
 from app.ingestion.chunking.splitter import split_document
+from app.ingestion.parsers.base import DocumentParser
 from app.ingestion.parsers.pdf import PDFParser
 from app.ingestion.schemas import ExtractionResult
-from app.ingestion.parsers.base import DocumentParser
 
 
 class IngestionService:

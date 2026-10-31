@@ -1,10 +1,9 @@
-from app.ingestion.exceptions import UnsupportedDocumentError
-from pathlib import Path
 import codecs
 import re
 import zipfile
+from pathlib import Path
 
-from app.ingestion.exceptions import DocumentNotFoundError, InvalidDocumentError
+from app.ingestion.exceptions import DocumentNotFoundError, InvalidDocumentError, UnsupportedDocumentError
 from app.ingestion.formats import DocumentFormat
 
 
