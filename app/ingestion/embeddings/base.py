@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
-
 from app.ingestion.embeddings.schemas import EmbeddingBatchResult
 
 

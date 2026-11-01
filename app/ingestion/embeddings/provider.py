@@ -10,6 +10,7 @@ from openai import (
     OpenAI,
     RateLimitError,
 )
+from openai.types import CreateEmbeddingResponse
 from pydantic import ValidationError
 
 from app.ingestion.embeddings.base import EmbeddingProvider
@@ -99,7 +100,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
     def _build_result(
         self,
-        response: object,
+        response: CreateEmbeddingResponse,
         expected_count: int,
     ) -> EmbeddingBatchResult:
         """Validate and convert the API response into our domain schema."""
