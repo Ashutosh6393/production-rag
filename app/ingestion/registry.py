@@ -1,7 +1,6 @@
 from app.ingestion.exceptions import UnsupportedDocumentError
 from app.ingestion.formats import DocumentFormat
 from app.ingestion.parsers.base import DocumentParser
-from app.ingestion.parsers.pdf import PDFParser
 
 
 class ParserRegistry:

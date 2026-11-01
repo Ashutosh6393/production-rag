@@ -12,14 +12,35 @@ class IngestionService:
 
     def __init__(
         self,
-        detector: DocumentFormatDetector | None = None,
-        registry: ParserRegistry | None = None,
+        detector: DocumentFormatDetector,
+        registry: ParserRegistry,
         *,
         chunk_size: int = 1000,
         overlap: int = 150,
     ) -> None:
-        self.detector = detector if detector is not None else DocumentFormatDetector()
-        self.registry = registry if registry is not None else ParserRegistry()
+        if detector is None:
+            raise TypeError("detector cannot be None")
+
+        if registry is None:
+            raise TypeError("registry cannot be None")
+
+        if not isinstance(chunk_size, int) or isinstance(chunk_size, bool):
+            raise TypeError("chunk_size must be an integer")
+
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be greater than zero")
+
+        if not isinstance(overlap, int) or isinstance(overlap, bool):
+            raise TypeError("overlap must be an integer")
+
+        if overlap < 0:
+            raise ValueError("overlap cannot be negative")
+
+        if overlap >= chunk_size:
+            raise ValueError("overlap must be smaller than chunk_size")
+
+        self.detector = detector
+        self.registry = registry
         self.chunk_size = chunk_size
         self.overlap = overlap
 
