@@ -15,6 +15,8 @@ def create_ingestion_service() -> IngestionService:
         PDFParser(),
     )
 
+    ## register the other parsers here
+
     return IngestionService(
         detector=DocumentFormatDetector(),
         registry=registry,
