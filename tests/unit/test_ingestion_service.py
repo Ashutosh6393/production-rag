@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pymupdf
 
-from app.ingestion.service import IngestionService
+from app.ingestion.factory import create_ingestion_service
 
 
 def test_process_pdf(tmp_path: Path) -> None:
@@ -16,7 +16,7 @@ def test_process_pdf(tmp_path: Path) -> None:
         )
         document.save(pdf_path)
 
-    service = IngestionService()
+    service = create_ingestion_service()
 
     extraction, chunks = service.process(pdf_path)
 
