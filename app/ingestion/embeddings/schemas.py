@@ -1,6 +1,56 @@
 import math
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.ingestion.chunking.schemas import DocumentChunk
+
+
+class EmbeddedChunk(BaseModel):
+    """A document chunk associated with its embedding vector."""
+
+    model_config = ConfigDict(frozen=True)
+
+    chunk: DocumentChunk
+    vector: tuple[float, ...] = Field(min_length=1)
+
+    @field_validator("vector")
+    @classmethod
+    def validate_vector(
+        cls,
+        vector: tuple[float, ...],
+    ) -> tuple[float, ...]:
+        if not all(math.isfinite(value) for value in vector):
+            raise ValueError("Embedding vector contains non-finite values")
+
+        return vector
+
+
+class EmbeddedDocument(BaseModel):
+    """All embedded chunks belonging to one embedding operation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model_name: str = Field(min_length=1)
+    chunks: tuple[EmbeddedChunk, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_chunks(self) -> "EmbeddedDocument":
+        dimensions = {len(item.vector) for item in self.chunks}
+
+        if len(dimensions) != 1:
+            raise ValueError("All embedded chunks must have identical vector dimensions")
+
+        chunk_ids = [item.chunk.chunk_id for item in self.chunks]
+
+        if len(chunk_ids) != len(set(chunk_ids)):
+            raise ValueError("Duplicate chunk IDs are not allowed")
+
+        return self
+
+    @property
+    def dimensions(self) -> int:
+        """Return the embedding dimensionality."""
+        return len(self.chunks[0].vector)
 
 
 class EmbeddingBatchResult(BaseModel):

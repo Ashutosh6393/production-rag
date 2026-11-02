@@ -24,10 +24,7 @@ class FakeEmbeddingProvider(EmbeddingProvider):
 
         return EmbeddingBatchResult(
             model_name=self.model_name,
-            vectors=tuple(
-                (float(index), 0.2, 0.3)
-                for index, _ in enumerate(texts)
-            ),
+            vectors=tuple((float(index), 0.2, 0.3) for index, _ in enumerate(texts)),
         )
 
 
@@ -159,16 +156,11 @@ def test_embedding_service_rejects_inconsistent_models(
         def embed(self, texts: Sequence[str]) -> EmbeddingBatchResult:
             self.call_count += 1
 
-            model_name = (
-                "model-a" if self.call_count == 1 else "model-b"
-            )
+            model_name = "model-a" if self.call_count == 1 else "model-b"
 
             return EmbeddingBatchResult(
                 model_name=model_name,
-                vectors=tuple(
-                    (0.1, 0.2, 0.3)
-                    for _ in texts
-                ),
+                vectors=tuple((0.1, 0.2, 0.3) for _ in texts),
             )
 
     service = EmbeddingService(
@@ -179,6 +171,33 @@ def test_embedding_service_rejects_inconsistent_models(
     with pytest.raises(
         EmbeddingProviderError,
         match="inconsistent model names",
+    ):
+        service.embed(["A", "B", "C"])
+
+
+def test_embedding_service_rejects_inconsistent_dimensions(batcher: TokenBatcher) -> None:
+    class ChangingDimensionsProvider(EmbeddingProvider):
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def embed(self, texts: Sequence[str]) -> EmbeddingBatchResult:
+            self.call_count += 1
+
+            vector = (0.1, 0.2, 0.3) if self.call_count == 1 else (0.1, 0.2, 0.3, 0.4)
+
+            return EmbeddingBatchResult(
+                model_name="fake-model",
+                vectors=tuple(vector for _ in texts),
+            )
+
+    service = EmbeddingService(
+        provider=ChangingDimensionsProvider(),
+        batcher=batcher,
+    )
+
+    with pytest.raises(
+        EmbeddingProviderError,
+        match="inconsistent vector dimensions",
     ):
         service.embed(["A", "B", "C"])
 

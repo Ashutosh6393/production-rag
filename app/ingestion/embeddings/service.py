@@ -39,6 +39,7 @@ class EmbeddingService:
 
         all_vectors: list[tuple[float, ...]] = []
         model_name: str | None = None
+        dimensions: int | None = None
 
         for batch in batches:
             result = self.provider.embed(batch)
@@ -54,6 +55,12 @@ class EmbeddingService:
 
             elif result.model_name != model_name:
                 raise EmbeddingProviderError("Provider returned inconsistent model names across batches.")
+
+            if dimensions is None:
+                dimensions = result.dimensions
+
+            elif result.dimensions != dimensions:
+                raise EmbeddingProviderError("Provider returned inconsistent vector dimensions across batches.")
 
             all_vectors.extend(result.vectors)
 
