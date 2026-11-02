@@ -23,3 +23,7 @@ class DocumentNotFoundError(IngestionError):
 
 class ExtractionError(IngestionError):
     """Document text extraction failed unexpectedly."""
+
+
+class EmptyDocumentError(IngestionError):
+    """The document contains no extractable text to process."""

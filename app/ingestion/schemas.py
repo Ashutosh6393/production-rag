@@ -2,6 +2,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.ingestion.embeddings.schemas import EmbeddedDocument
+
 
 # page may not contain any text, but it will still be extracted it may contain images or other non-text content
 class ExtractedPage(BaseModel):
@@ -33,6 +35,13 @@ class ExtractionResult(BaseModel):
 
         return "\n\n".join(page.text for page in self.pages)
 
+class IngestionResult(BaseModel):
+    """Complete result of processing and embedding a document."""
+
+    model_config = ConfigDict(frozen=True)
+
+    extraction: ExtractionResult
+    embedding: EmbeddedDocument
 
 # uv run python -c "from app.ingestion.schemas import ExtractedPage, ExtractionResult; p = ExtractedPage(page_number=1, text='Hello'); r = ExtractionResult(source_name='test.pdf', source_format='pdf', page_count=1, pages=(p,)); print(r.full_text)"
 
