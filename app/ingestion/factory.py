@@ -18,7 +18,7 @@ def create_ingestion_service(
     registry = ParserRegistry()
     registry.register(DocumentFormat.PDF, PDFParser())
 
-    provider = embedding_provider or OpenAIEmbeddingProvider()
+    provider = embedding_provider if embedding_provider is not None else OpenAIEmbeddingProvider()
 
     embedding_service = EmbeddingService(
         provider=provider,

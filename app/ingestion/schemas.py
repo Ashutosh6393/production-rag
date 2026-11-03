@@ -35,13 +35,15 @@ class ExtractionResult(BaseModel):
 
         return "\n\n".join(page.text for page in self.pages)
 
+
 class IngestionResult(BaseModel):
     """Complete result of processing and embedding a document."""
 
     model_config = ConfigDict(frozen=True)
 
     extraction: ExtractionResult
-    embedding: EmbeddedDocument
+    embedded_document: EmbeddedDocument
+
 
 # uv run python -c "from app.ingestion.schemas import ExtractedPage, ExtractionResult; p = ExtractedPage(page_number=1, text='Hello'); r = ExtractionResult(source_name='test.pdf', source_format='pdf', page_count=1, pages=(p,)); print(r.full_text)"
 

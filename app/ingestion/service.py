@@ -2,6 +2,7 @@ from pathlib import Path
 
 from app.ingestion.chunking.splitter import split_document
 from app.ingestion.detector import DocumentFormatDetector
+from app.ingestion.embeddings.exceptions import EmbeddingProviderError
 from app.ingestion.embeddings.schemas import EmbeddedChunk, EmbeddedDocument
 from app.ingestion.embeddings.service import EmbeddingService
 from app.ingestion.exceptions import EmptyDocumentError
@@ -71,7 +72,7 @@ class IngestionService:
         embedding_result = self.embedding_service.embed([chunk.text for chunk in chunks])
 
         if len(embedding_result.vectors) != len(chunks):
-            raise RuntimeError("Embedding result count does not match the number of document chunks.")
+            raise EmbeddingProviderError("Embedding vector count does not match the number of document chunks.")
 
         embedded_chunks = tuple(
             EmbeddedChunk(
@@ -92,5 +93,5 @@ class IngestionService:
 
         return IngestionResult(
             extraction=extraction,
-            embedding=embedded_document,
+            embedded_document=embedded_document,
         )
