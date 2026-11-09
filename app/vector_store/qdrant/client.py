@@ -31,7 +31,7 @@ class QdrantClientManager:
             self._client = QdrantClient(
                 url=str(settings.qdrant_url),
                 api_key=api_key,
-                timeout=int(settings.qdrant_timeout_seconds),
+                timeout=settings.qdrant_timeout_seconds,
             )
         except Exception as exc:
             raise VectorStoreOperationError("Failed to initialize the Qdrant client.") from exc

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     qdrant_collection_name: str = Field(default="prod_rag_chunks", min_length=1, max_length=128)
 
-    qdrant_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    qdrant_timeout_seconds: int = Field(default=10, gt=0, le=120)
 
 
 @lru_cache(maxsize=1)

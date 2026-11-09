@@ -13,3 +13,5 @@ wheels/
 .env
 
 sample.pdf
+app.zip
+tests.zip
