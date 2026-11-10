@@ -1,6 +1,11 @@
-
 from types import SimpleNamespace
 from unittest.mock import Mock
+from unittest.mock import MagicMock
+
+import pytest
+
+from app.vector_store.exceptions import VectorStoreOperationError
+from app.vector_store.schemas import VectorSearchResult
 
 import pytest
 from qdrant_client.models import Filter, FilterSelector, PointIdsList
@@ -20,6 +25,11 @@ def settings() -> Settings:
 @pytest.fixture
 def client() -> Mock:
     return Mock()
+
+
+@pytest.fixture
+def mock_client(client: Mock) -> Mock:
+    return client
 
 
 @pytest.fixture
@@ -95,9 +105,7 @@ def test_upserts_document(
         document_id="doc-1",
     )
 
-    collection_manager.ensure_collection.assert_called_once_with(
-        vector_size=embedded_document.dimensions
-    )
+    collection_manager.ensure_collection.assert_called_once_with(vector_size=embedded_document.dimensions)
 
     client.upsert.assert_called_once()
 
@@ -307,3 +315,193 @@ def test_wraps_stale_point_deletion_failure(
 
     # The new points were already upserted successfully.
     client.upsert.assert_called_once()
+
+
+def make_search_point(
+    *,
+    document_id: str = "doc-1",
+    chunk_id: str = "chunk-1",
+    chunk_index: int = 0,
+    text: str = "Employee security policy.",
+    score: float = 0.95,
+) -> MagicMock:
+    point = MagicMock()
+
+    point.payload = {
+        "tenant_id": "tenant-1",
+        "document_id": document_id,
+        "chunk_id": chunk_id,
+        "chunk_index": chunk_index,
+        "text": text,
+        "source_name": "policy.pdf",
+        "page_numbers": [1],
+        "metadata": {"department": "engineering"},
+    }
+
+    point.score = score
+
+    return point
+
+
+def test_search_returns_validated_results(store, mock_client):
+    mock_client.collection_exists.return_value = True
+    mock_client.query_points.return_value.points = [
+        make_search_point(),
+        make_search_point(
+            chunk_id="chunk-2",
+            chunk_index=1,
+            text="Password management policy.",
+            score=0.87,
+        ),
+    ]
+
+    results = store.search(
+        [0.1, 0.2, 0.3],
+        tenant_id="tenant-1",
+        limit=5,
+    )
+
+    assert len(results) == 2
+    assert all(isinstance(item, VectorSearchResult) for item in results)
+
+    assert results[0].chunk_id == "chunk-1"
+    assert results[0].score == 0.95
+    assert results[1].chunk_id == "chunk-2"
+
+    mock_client.query_points.assert_called_once()
+
+
+def test_search_always_applies_tenant_filter(store, mock_client):
+    mock_client.collection_exists.return_value = True
+    mock_client.query_points.return_value.points = []
+
+    store.search(
+        [0.1, 0.2],
+        tenant_id="tenant-1",
+    )
+
+    query_filter = mock_client.query_points.call_args.kwargs["query_filter"]
+
+    assert len(query_filter.must) == 1
+    assert query_filter.must[0].key == "tenant_id"
+    assert query_filter.must[0].match.value == "tenant-1"
+
+
+def test_search_applies_optional_document_filter(store, mock_client):
+    mock_client.collection_exists.return_value = True
+    mock_client.query_points.return_value.points = []
+
+    store.search(
+        [0.1, 0.2],
+        tenant_id="tenant-1",
+        document_id="doc-1",
+    )
+
+    query_filter = mock_client.query_points.call_args.kwargs["query_filter"]
+
+    assert len(query_filter.must) == 2
+
+    filter_values = {condition.key: condition.match.value for condition in query_filter.must}
+
+    assert filter_values == {
+        "tenant_id": "tenant-1",
+        "document_id": "doc-1",
+    }
+
+
+def test_search_returns_empty_when_collection_does_not_exist(
+    store,
+    mock_client,
+):
+    mock_client.collection_exists.return_value = False
+
+    results = store.search(
+        [0.1, 0.2],
+        tenant_id="tenant-1",
+    )
+
+    assert results == []
+    mock_client.query_points.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "query_vector",
+    [
+        [],
+        [0.1, float("nan")],
+        [0.1, float("inf")],
+        [0.1, float("-inf")],
+        [0.1, True],
+        [0.1, "invalid"],
+        "invalid",
+        None,
+    ],
+)
+def test_search_rejects_invalid_query_vectors(store, query_vector):
+    with pytest.raises((ValueError, TypeError)):
+        store.search(
+            query_vector,
+            tenant_id="tenant-1",
+        )
+
+
+@pytest.mark.parametrize("limit", [0, -1, 101, True, 1.5])
+def test_search_rejects_invalid_limits(store, limit):
+    with pytest.raises(ValueError):
+        store.search(
+            [0.1, 0.2],
+            tenant_id="tenant-1",
+            limit=limit,
+        )
+
+
+def test_search_rejects_empty_tenant_id(store):
+    with pytest.raises(ValueError):
+        store.search(
+            [0.1, 0.2],
+            tenant_id="",
+        )
+
+
+def test_search_wraps_qdrant_errors(store, mock_client):
+    mock_client.collection_exists.return_value = True
+    mock_client.query_points.side_effect = RuntimeError("Qdrant unavailable")
+
+    with pytest.raises(VectorStoreOperationError):
+        store.search(
+            [0.1, 0.2],
+            tenant_id="tenant-1",
+        )
+
+
+def test_search_rejects_malformed_payload(store, mock_client):
+    mock_client.collection_exists.return_value = True
+
+    point = make_search_point()
+    del point.payload["chunk_id"]
+
+    mock_client.query_points.return_value.points = [point]
+
+    with pytest.raises(VectorStoreOperationError):
+        store.search(
+            [0.1, 0.2],
+            tenant_id="tenant-1",
+        )
+
+
+def test_search_passes_query_configuration_to_qdrant(store, mock_client):
+    mock_client.collection_exists.return_value = True
+    mock_client.query_points.return_value.points = []
+
+    store.search(
+        [0.1, 0.2, 0.3],
+        tenant_id="tenant-1",
+        limit=7,
+    )
+
+    kwargs = mock_client.query_points.call_args.kwargs
+
+    assert kwargs["query"] == [0.1, 0.2, 0.3]
+    assert kwargs["limit"] == 7
+    assert kwargs["with_payload"] is True
+    assert kwargs["with_vectors"] is False

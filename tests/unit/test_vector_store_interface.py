@@ -56,6 +56,16 @@ def test_concrete_vector_store_can_be_instantiated() -> None:
         ) -> None:
             pass
 
+        def search(
+            self,
+            query_vector,
+            *,
+            tenant_id: str,
+            limit: int = 10,
+            document_id: str | None = None,
+        ):
+            return []
+
     store = FakeVectorStore()
 
     assert isinstance(store, VectorStore)

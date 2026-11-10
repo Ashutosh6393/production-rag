@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 
 from app.ingestion.embeddings.schemas import EmbeddedDocument
+from app.vector_store.schemas import VectorSearchResult
 
 
 class VectorStore(ABC):
@@ -33,3 +35,16 @@ class VectorStore(ABC):
     ) -> None:
         """Delete all stored chunks belonging to a document."""
         raise NotImplementedError
+    
+    @abstractmethod
+    def search(
+        self,
+        query_vector: Sequence[float],
+        *,
+        tenant_id: str,
+        limit: int = 10,
+        document_id: str | None = None,
+    ) -> list[VectorSearchResult]:
+        """Search for similar chunks within a tenant's documents."""
+        raise NotImplementedError
+

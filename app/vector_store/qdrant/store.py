@@ -1,5 +1,8 @@
+import math
+from collections.abc import Sequence
 
-from qdrant_client import QdrantClient
+from pydantic import ValidationError
+from qdrant_client import QdrantClient, models
 from qdrant_client.models import (
     FieldCondition,
     Filter,
@@ -17,10 +20,16 @@ from app.vector_store.exceptions import (
 from app.vector_store.qdrant.client import QdrantClientManager
 from app.vector_store.qdrant.collection import QdrantCollectionManager
 from app.vector_store.qdrant.point import build_point, generate_point_id
+from app.vector_store.schemas import VectorSearchResult
 
 
 class QdrantVectorStore(VectorStore):
     """Qdrant implementation of the vector store contract."""
+
+    @staticmethod
+    def _validate_identifier(value: str, field_name: str) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name} must be a non-empty string.")
 
     def __init__(
         self,
@@ -51,9 +60,7 @@ class QdrantVectorStore(VectorStore):
         """Insert or replace all chunks belonging to a document."""
 
         if not isinstance(embedded_document, EmbeddedDocument):
-            raise TypeError(
-                "embedded_document must be an EmbeddedDocument instance"
-            )
+            raise TypeError("embedded_document must be an EmbeddedDocument instance")
 
         if not embedded_document.chunks:
             raise ValueError("embedded_document must contain at least one chunk")
@@ -61,9 +68,7 @@ class QdrantVectorStore(VectorStore):
         client = self._client_manager.get_client()
 
         # Ensure the collection matches the embedding dimensions.
-        self._collection_manager.ensure_collection(
-            vector_size=embedded_document.dimensions
-        )
+        self._collection_manager.ensure_collection(vector_size=embedded_document.dimensions)
 
         # Construct the new points before modifying Qdrant.
         points = [
@@ -100,9 +105,7 @@ class QdrantVectorStore(VectorStore):
                 wait=True,
             )
         except Exception as exc:
-            raise VectorStoreOperationError(
-                "Failed to upsert document points"
-            ) from exc
+            raise VectorStoreOperationError("Failed to upsert document points") from exc
 
         # Remove chunks that no longer belong to the document.
         stale_point_ids = existing_point_ids - new_point_ids
@@ -113,15 +116,11 @@ class QdrantVectorStore(VectorStore):
         try:
             client.delete(
                 collection_name=self._collection_name,
-                points_selector=PointIdsList(
-                    points=list(stale_point_ids)
-                ),
+                points_selector=PointIdsList(points=list(stale_point_ids)),
                 wait=True,
             )
         except Exception as exc:
-            raise VectorStoreOperationError(
-                "stale points could not be deleted"
-            ) from exc
+            raise VectorStoreOperationError("stale points could not be deleted") from exc
 
     def delete_document(
         self,
@@ -152,9 +151,7 @@ class QdrantVectorStore(VectorStore):
                 wait=True,
             )
         except Exception as exc:
-            raise VectorStoreOperationError(
-                "Failed to delete document points"
-            ) from exc
+            raise VectorStoreOperationError("Failed to delete document points") from exc
 
     def _get_document_point_ids(
         self,
@@ -212,3 +209,111 @@ class QdrantVectorStore(VectorStore):
                 ),
             ]
         )
+
+    def search(
+        self,
+        query_vector: Sequence[float],
+        *,
+        tenant_id: str,
+        limit: int = 10,
+        document_id: str | None = None,
+    ) -> list[VectorSearchResult]:
+        """Search for similar chunks within a tenant's documents."""
+
+        self._validate_identifier(tenant_id, "tenant_id")
+
+        if document_id is not None:
+            self._validate_identifier(document_id, "document_id")
+
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("limit must be an integer between 1 and 100.")
+
+        if isinstance(query_vector, (str, bytes)) or not isinstance(
+            query_vector, Sequence
+        ):
+            raise ValueError("query_vector must be a non-empty sequence of numbers.")
+
+        if not query_vector:
+            raise ValueError("query_vector cannot be empty.")
+
+        validated_vector: list[float] = []
+
+        for value in query_vector:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise ValueError("query_vector must contain only numeric values.")
+
+            numeric_value = float(value)
+
+            if not math.isfinite(numeric_value):
+                raise ValueError("query_vector must contain only finite values.")
+
+            validated_vector.append(numeric_value)
+
+        client = self._client_manager.get_client()
+
+        try:
+            if not client.collection_exists(collection_name=self._collection_name):
+                return []
+
+            query_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="tenant_id",
+                        match=models.MatchValue(value=tenant_id),
+                    )
+                ]
+            )
+
+            if document_id is not None:
+                query_filter.must.append(
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    )
+                )
+
+            response = client.query_points(
+                collection_name=self._collection_name,
+                query=validated_vector,
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+
+        except Exception as exc:
+            raise VectorStoreOperationError(
+                "Failed to search for document chunks in Qdrant."
+            ) from exc
+
+        results: list[VectorSearchResult] = []
+
+        for point in response.points:
+            payload = point.payload
+
+            if not isinstance(payload, dict):
+                raise VectorStoreOperationError(
+                    "Qdrant returned a search result with an invalid payload."
+                )
+
+            try:
+                result = VectorSearchResult.model_validate(
+                    {
+                        "document_id": payload["document_id"],
+                        "chunk_id": payload["chunk_id"],
+                        "chunk_index": payload["chunk_index"],
+                        "text": payload["text"],
+                        "source_name": payload["source_name"],
+                        "page_numbers": payload.get("page_numbers", []),
+                        "metadata": payload.get("metadata", {}),
+                        "score": point.score,
+                    }
+                )
+            except (KeyError, ValidationError, TypeError, ValueError) as exc:
+                raise VectorStoreOperationError(
+                    "Qdrant returned a search result with an invalid payload structure."
+                ) from exc
+
+            results.append(result)
+
+        return results
