@@ -379,22 +379,22 @@ class QdrantVectorStore(VectorStore):
             if not client.collection_exists(collection_name=self._collection_name):
                 return []
 
-            query_filter = models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="tenant_id",
-                        match=models.MatchValue(value=tenant_id),
-                    )
-                ]
-            )
+            conditions: list[models.Condition] = [
+                models.FieldCondition(
+                    key="tenant_id",
+                    match=models.MatchValue(value=tenant_id),
+                )
+            ]
 
             if document_id is not None:
-                query_filter.must.append(
+                conditions.append(
                     models.FieldCondition(
                         key="document_id",
                         match=models.MatchValue(value=document_id),
                     )
                 )
+
+            query_filter = models.Filter(must=conditions)
 
             response = client.query_points(
                 collection_name=self._collection_name,
