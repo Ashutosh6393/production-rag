@@ -1,0 +1,1 @@
+"""Document vector-indexing orchestration."""

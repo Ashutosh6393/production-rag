@@ -71,6 +71,16 @@ class FakeVectorStore(VectorStore):
         return self.results
 
 
+    def verify_document(
+        self,
+        *,
+        tenant_id: str,
+        document_id: str,
+        expected_chunk_ids,
+    ):
+        raise NotImplementedError
+
+
 @pytest.fixture
 def search_result() -> VectorSearchResult:
     return VectorSearchResult(

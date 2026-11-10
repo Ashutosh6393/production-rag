@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.vector_store.schemas import VectorSearchResult
+from app.vector_store.schemas import IndexVerificationResult, VectorSearchResult
 
 
 def test_creates_vector_search_result():
@@ -45,3 +45,48 @@ def test_result_is_immutable():
 
     with pytest.raises(ValidationError):
         result.score = 0.5
+
+
+def test_index_verification_result_reports_success() -> None:
+    result = IndexVerificationResult(
+        expected_chunk_ids=("chunk-1", "chunk-2"),
+        verified_chunk_ids=("chunk-1", "chunk-2"),
+        missing_chunk_ids=(),
+    )
+
+    assert result.is_verified is True
+
+
+def test_index_verification_result_reports_missing_chunks() -> None:
+    result = IndexVerificationResult(
+        expected_chunk_ids=("chunk-1", "chunk-2"),
+        verified_chunk_ids=("chunk-1",),
+        missing_chunk_ids=("chunk-2",),
+    )
+
+    assert result.is_verified is False
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {
+            "expected_chunk_ids": ("chunk-1", "chunk-1"),
+            "verified_chunk_ids": ("chunk-1",),
+            "missing_chunk_ids": (),
+        },
+        {
+            "expected_chunk_ids": ("chunk-1",),
+            "verified_chunk_ids": ("chunk-1",),
+            "missing_chunk_ids": ("chunk-1",),
+        },
+        {
+            "expected_chunk_ids": ("chunk-1", "chunk-2"),
+            "verified_chunk_ids": ("chunk-1",),
+            "missing_chunk_ids": (),
+        },
+    ],
+)
+def test_index_verification_result_rejects_inconsistent_chunk_sets(values) -> None:
+    with pytest.raises(ValidationError):
+        IndexVerificationResult(**values)

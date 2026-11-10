@@ -14,6 +14,7 @@ from app.config import Settings
 from app.ingestion.chunking.schemas import DocumentChunk
 from app.ingestion.embeddings.schemas import EmbeddedChunk, EmbeddedDocument
 from app.vector_store.exceptions import VectorStoreOperationError
+from app.vector_store.qdrant.point import generate_point_id
 from app.vector_store.qdrant.store import QdrantVectorStore
 
 
@@ -505,3 +506,187 @@ def test_search_passes_query_configuration_to_qdrant(store, mock_client):
     assert kwargs["limit"] == 7
     assert kwargs["with_payload"] is True
     assert kwargs["with_vectors"] is False
+
+
+def _verification_record(tenant_id: str, document_id: str, chunk_id: str):
+    return SimpleNamespace(
+        id=generate_point_id(
+            tenant_id=tenant_id,
+            document_id=document_id,
+            chunk_id=chunk_id,
+        ),
+        payload={
+            "tenant_id": tenant_id,
+            "document_id": document_id,
+            "chunk_id": chunk_id,
+        },
+    )
+
+
+def test_verify_document_confirms_exact_chunk_set(
+    store: QdrantVectorStore,
+    client: Mock,
+    embedded_document: EmbeddedDocument,
+) -> None:
+    chunk_ids = tuple(item.chunk.chunk_id for item in embedded_document.chunks)
+    client.collection_exists.return_value = True
+    client.scroll.return_value = (
+        [_verification_record("tenant-1", "doc-1", chunk_id) for chunk_id in chunk_ids],
+        None,
+    )
+
+    result = store.verify_document(
+        tenant_id="tenant-1",
+        document_id="doc-1",
+        expected_chunk_ids=chunk_ids,
+    )
+
+    assert result.is_verified is True
+    assert result.expected_chunk_ids == chunk_ids
+    assert result.verified_chunk_ids == chunk_ids
+    assert result.missing_chunk_ids == ()
+    assert result.unexpected_chunk_ids == ()
+
+    kwargs = client.scroll.call_args.kwargs
+    assert kwargs["with_payload"] == ["tenant_id", "document_id", "chunk_id"]
+    assert kwargs["with_vectors"] is False
+
+
+def test_verify_document_reports_missing_chunks(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    client.collection_exists.return_value = True
+    client.scroll.return_value = (
+        [_verification_record("tenant-1", "doc-1", "chunk-1")],
+        None,
+    )
+
+    result = store.verify_document(
+        tenant_id="tenant-1",
+        document_id="doc-1",
+        expected_chunk_ids=("chunk-1", "chunk-2"),
+    )
+
+    assert result.is_verified is False
+    assert result.verified_chunk_ids == ("chunk-1",)
+    assert result.missing_chunk_ids == ("chunk-2",)
+    assert result.unexpected_chunk_ids == ()
+
+
+def test_verify_document_reports_unexpected_stale_chunks(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    client.collection_exists.return_value = True
+    client.scroll.return_value = (
+        [
+            _verification_record("tenant-1", "doc-1", "chunk-1"),
+            _verification_record("tenant-1", "doc-1", "stale-chunk"),
+        ],
+        None,
+    )
+
+    result = store.verify_document(
+        tenant_id="tenant-1",
+        document_id="doc-1",
+        expected_chunk_ids=("chunk-1",),
+    )
+
+    assert result.is_verified is False
+    assert result.verified_chunk_ids == ("chunk-1",)
+    assert result.missing_chunk_ids == ()
+    assert result.unexpected_chunk_ids == ("stale-chunk",)
+
+
+def test_verify_document_reports_all_chunks_missing_when_collection_absent(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    client.collection_exists.return_value = False
+
+    result = store.verify_document(
+        tenant_id="tenant-1",
+        document_id="doc-1",
+        expected_chunk_ids=("chunk-1", "chunk-2"),
+    )
+
+    assert result.is_verified is False
+    assert result.verified_chunk_ids == ()
+    assert result.missing_chunk_ids == ("chunk-1", "chunk-2")
+    client.scroll.assert_not_called()
+
+
+def test_verify_document_supports_multiple_scroll_pages(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    client.collection_exists.return_value = True
+    client.scroll.side_effect = [
+        ([_verification_record("tenant-1", "doc-1", "chunk-1")], "next-page"),
+        ([_verification_record("tenant-1", "doc-1", "chunk-2")], None),
+    ]
+
+    result = store.verify_document(
+        tenant_id="tenant-1",
+        document_id="doc-1",
+        expected_chunk_ids=("chunk-1", "chunk-2"),
+    )
+
+    assert result.is_verified is True
+    assert client.scroll.call_count == 2
+    assert client.scroll.call_args_list[1].kwargs["offset"] == "next-page"
+
+
+def test_verify_document_wraps_qdrant_errors(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    client.collection_exists.return_value = True
+    client.scroll.side_effect = RuntimeError("Qdrant unavailable")
+
+    with pytest.raises(VectorStoreOperationError, match="Failed to verify"):
+        store.verify_document(
+            tenant_id="tenant-1",
+            document_id="doc-1",
+            expected_chunk_ids=("chunk-1",),
+        )
+
+
+def test_verify_document_rejects_identity_mismatch(
+    store: QdrantVectorStore,
+    client: Mock,
+) -> None:
+    record = _verification_record("tenant-1", "doc-1", "chunk-1")
+    record.payload["tenant_id"] = "another-tenant"
+    client.collection_exists.return_value = True
+    client.scroll.return_value = ([record], None)
+
+    with pytest.raises(VectorStoreOperationError, match="payload identity"):
+        store.verify_document(
+            tenant_id="tenant-1",
+            document_id="doc-1",
+            expected_chunk_ids=("chunk-1",),
+        )
+
+
+@pytest.mark.parametrize(
+    "expected_chunk_ids",
+    [
+        (),
+        ("chunk-1", "chunk-1"),
+        ("",),
+        (" chunk-1",),
+        "chunk-1",
+    ],
+)
+def test_verify_document_rejects_invalid_expected_chunk_ids(
+    store: QdrantVectorStore,
+    expected_chunk_ids,
+) -> None:
+    with pytest.raises((TypeError, ValueError)):
+        store.verify_document(
+            tenant_id="tenant-1",
+            document_id="doc-1",
+            expected_chunk_ids=expected_chunk_ids,
+        )

@@ -20,7 +20,7 @@ from app.vector_store.exceptions import (
 from app.vector_store.qdrant.client import QdrantClientManager
 from app.vector_store.qdrant.collection import QdrantCollectionManager
 from app.vector_store.qdrant.point import build_point, generate_point_id
-from app.vector_store.schemas import VectorSearchResult
+from app.vector_store.schemas import IndexVerificationResult, VectorSearchResult
 
 
 class QdrantVectorStore(VectorStore):
@@ -28,8 +28,14 @@ class QdrantVectorStore(VectorStore):
 
     @staticmethod
     def _validate_identifier(value: str, field_name: str) -> None:
-        if not isinstance(value, str) or not value.strip():
+        if not isinstance(value, str):
+            raise TypeError(f"{field_name} must be a string.")
+
+        if not value.strip():
             raise ValueError(f"{field_name} must be a non-empty string.")
+
+        if value != value.strip():
+            raise ValueError(f"{field_name} cannot contain leading or trailing whitespace.")
 
     def __init__(
         self,
@@ -61,6 +67,9 @@ class QdrantVectorStore(VectorStore):
 
         if not isinstance(embedded_document, EmbeddedDocument):
             raise TypeError("embedded_document must be an EmbeddedDocument instance")
+
+        self._validate_identifier(tenant_id, "tenant_id")
+        self._validate_identifier(document_id, "document_id")
 
         if not embedded_document.chunks:
             raise ValueError("embedded_document must contain at least one chunk")
@@ -130,12 +139,8 @@ class QdrantVectorStore(VectorStore):
     ) -> None:
         """Delete all chunks belonging to a tenant's document."""
 
-        # Reuse point ID validation for consistent identifier checks.
-        generate_point_id(
-            tenant_id=tenant_id,
-            document_id=document_id,
-            chunk_id="validation-only",
-        )
+        self._validate_identifier(tenant_id, "tenant_id")
+        self._validate_identifier(document_id, "document_id")
 
         client = self._client_manager.get_client()
 
@@ -208,6 +213,125 @@ class QdrantVectorStore(VectorStore):
                     match=MatchValue(value=document_id),
                 ),
             ]
+        )
+
+    def verify_document(
+        self,
+        *,
+        tenant_id: str,
+        document_id: str,
+        expected_chunk_ids: Sequence[str],
+    ) -> IndexVerificationResult:
+        """Verify the exact chunk set stored for a tenant's document."""
+
+        self._validate_identifier(tenant_id, "tenant_id")
+        self._validate_identifier(document_id, "document_id")
+
+        if isinstance(expected_chunk_ids, (str, bytes)) or not isinstance(
+            expected_chunk_ids, Sequence
+        ):
+            raise TypeError("expected_chunk_ids must be a sequence of strings")
+
+        if not expected_chunk_ids:
+            raise ValueError("expected_chunk_ids cannot be empty")
+
+        normalized_chunk_ids: list[str] = []
+        for chunk_id in expected_chunk_ids:
+            self._validate_identifier(chunk_id, "chunk_id")
+            normalized_chunk_ids.append(chunk_id)
+
+        if len(normalized_chunk_ids) != len(set(normalized_chunk_ids)):
+            raise ValueError("expected_chunk_ids must not contain duplicates")
+
+        expected_ids = tuple(normalized_chunk_ids)
+        expected_set = set(expected_ids)
+        document_filter = self._build_document_filter(
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+
+        client = self._client_manager.get_client()
+        actual_chunk_ids: list[str] = []
+        offset = None
+
+        try:
+            if not client.collection_exists(collection_name=self._collection_name):
+                records = []
+            else:
+                while True:
+                    records, next_offset = client.scroll(
+                        collection_name=self._collection_name,
+                        scroll_filter=document_filter,
+                        limit=256,
+                        offset=offset,
+                        with_payload=["tenant_id", "document_id", "chunk_id"],
+                        with_vectors=False,
+                    )
+
+                    for record in records:
+                        payload = record.payload
+
+                        if not isinstance(payload, dict):
+                            raise VectorStoreOperationError(
+                                "Qdrant returned a point with an invalid verification payload."
+                            )
+
+                        chunk_id = payload.get("chunk_id")
+                        if (
+                            payload.get("tenant_id") != tenant_id
+                            or payload.get("document_id") != document_id
+                            or not isinstance(chunk_id, str)
+                            or not chunk_id
+                        ):
+                            raise VectorStoreOperationError(
+                                "Qdrant returned a point whose payload identity is invalid."
+                            )
+
+                        expected_point_id = generate_point_id(
+                            tenant_id=tenant_id,
+                            document_id=document_id,
+                            chunk_id=chunk_id,
+                        )
+                        if str(record.id) != expected_point_id:
+                            raise VectorStoreOperationError(
+                                "Qdrant returned a point whose ID does not match its payload."
+                            )
+
+                        actual_chunk_ids.append(chunk_id)
+
+                    if next_offset is None:
+                        break
+
+                    offset = next_offset
+
+        except VectorStoreOperationError:
+            raise
+        except Exception as exc:
+            raise VectorStoreOperationError(
+                "Failed to verify document points in Qdrant."
+            ) from exc
+
+        if len(actual_chunk_ids) != len(set(actual_chunk_ids)):
+            raise VectorStoreOperationError(
+                "Qdrant contains duplicate chunk identities for the requested document."
+            )
+
+        actual_set = set(actual_chunk_ids)
+        verified_chunk_ids = tuple(
+            chunk_id for chunk_id in expected_ids if chunk_id in actual_set
+        )
+        missing_chunk_ids = tuple(
+            chunk_id for chunk_id in expected_ids if chunk_id not in actual_set
+        )
+        unexpected_chunk_ids = tuple(
+            chunk_id for chunk_id in actual_chunk_ids if chunk_id not in expected_set
+        )
+
+        return IndexVerificationResult(
+            expected_chunk_ids=expected_ids,
+            verified_chunk_ids=verified_chunk_ids,
+            missing_chunk_ids=missing_chunk_ids,
+            unexpected_chunk_ids=unexpected_chunk_ids,
         )
 
     def search(

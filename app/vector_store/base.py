@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 
 from app.ingestion.embeddings.schemas import EmbeddedDocument
-from app.vector_store.schemas import VectorSearchResult
+from app.vector_store.schemas import IndexVerificationResult, VectorSearchResult
 
 
 class VectorStore(ABC):
@@ -36,6 +36,17 @@ class VectorStore(ABC):
         """Delete all stored chunks belonging to a document."""
         raise NotImplementedError
     
+    @abstractmethod
+    def verify_document(
+        self,
+        *,
+        tenant_id: str,
+        document_id: str,
+        expected_chunk_ids: Sequence[str],
+    ) -> IndexVerificationResult:
+        """Verify that all expected chunk IDs exist for the specified document."""
+        raise NotImplementedError
+
     @abstractmethod
     def search(
         self,
