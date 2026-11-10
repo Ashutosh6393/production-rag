@@ -1,11 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import Mock
-from unittest.mock import MagicMock
-
-import pytest
-
-from app.vector_store.exceptions import VectorStoreOperationError
-from app.vector_store.schemas import VectorSearchResult
+from unittest.mock import MagicMock, Mock
 
 import pytest
 from qdrant_client.models import Filter, FilterSelector, PointIdsList
@@ -16,6 +10,7 @@ from app.ingestion.embeddings.schemas import EmbeddedChunk, EmbeddedDocument
 from app.vector_store.exceptions import VectorStoreOperationError
 from app.vector_store.qdrant.point import generate_point_id
 from app.vector_store.qdrant.store import QdrantVectorStore
+from app.vector_store.schemas import VectorSearchResult
 
 
 @pytest.fixture

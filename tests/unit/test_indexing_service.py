@@ -4,8 +4,8 @@ from app.indexing.exceptions import (
     IndexingError,
     IndexingVerificationError,
 )
-from app.indexing.service import IndexingService
 from app.indexing.schemas import IndexingResult
+from app.indexing.service import IndexingService
 from app.ingestion.chunking.schemas import DocumentChunk
 from app.ingestion.embeddings.schemas import EmbeddedChunk, EmbeddedDocument
 from app.vector_store.base import VectorStore

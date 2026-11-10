@@ -1,3 +1,5 @@
+from typing import Self
+
 from qdrant_client import QdrantClient
 
 from app.config import Settings
@@ -68,7 +70,7 @@ class QdrantClientManager:
         except Exception as exc:
             raise VectorStoreOperationError("Failed to close the Qdrant client.") from exc
 
-    def __enter__(self) -> "QdrantClientManager":
+    def __enter__(self) -> Self:
         if self._closed:
             raise VectorStoreOperationError("Cannot enter a closed Qdrant client manager.")
 
